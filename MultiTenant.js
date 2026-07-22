@@ -128,7 +128,13 @@ async function _renderListaUsuarios() {
       box.innerHTML = '<div class="nd">Nenhum usuário cadastrado ainda. Clique em "➕ Novo Usuário".</div>';
       return;
     }
-    box.innerHTML = usuarios.map(u => `
+    box.innerHTML = usuarios.map(u => {
+      const detalhes = u.isAdmin
+        ? `usuário: ${esc(u.usuario)}`
+        : `usuário: ${esc(u.usuario)} · senha de login: <span class="senha-oculta" data-valor="${esc(u.senha || '')}">••••••</span>` +
+          (u.senhaSistemaAtual ? ` · senha do sistema (edição): <span class="senha-oculta" data-valor="${esc(u.senhaSistemaAtual)}">••••••</span>` : '') +
+          (u.firebaseConfig && u.firebaseConfig.projectId ? ' · projeto: ' + esc(u.firebaseConfig.projectId) : '');
+      return `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
         <div>
           <div style="font-weight:700">
@@ -137,21 +143,29 @@ async function _renderListaUsuarios() {
             ${u.ativo === false ? ' <span style="color:var(--danger);font-size:.68rem">(inativo)</span>' : ''}
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:.74rem;color:var(--muted)">
-            usuário: ${esc(u.usuario)} · senha de login: ${esc(u.senha)}
-            ${u.senhaSistemaAtual ? ' · senha do sistema (edição): <strong style="color:var(--text)">' + esc(u.senhaSistemaAtual) + '</strong>' : ''}
-            ${u.firebaseConfig && u.firebaseConfig.projectId ? ' · projeto: ' + esc(u.firebaseConfig.projectId) : ''}
+            ${detalhes}
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0">
+          ${!u.isAdmin ? `<button class="btn btn-o btn-sm" onclick="_toggleSenhasLinha(this)">👁 Ver senhas</button>` : ''}
           <button class="btn btn-o btn-sm" onclick="abrirFormUsuario('${u.id}')">Editar</button>
           ${!u.isAdmin ? `<button class="btn btn-d btn-sm" onclick="excluirUsuario('${u.id}')">Excluir</button>` : ''}
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch (e) {
     console.error(e);
     box.innerHTML = '<div class="nd">Erro ao carregar usuários: ' + esc(e.message) + '</div>';
   }
+}
+
+function _toggleSenhasLinha(btn) {
+  const linha = btn.closest('div[style*="justify-content:space-between"]');
+  const spans = linha.querySelectorAll('.senha-oculta');
+  const revelado = btn.textContent.includes('Ocultar');
+  spans.forEach(s => { s.textContent = revelado ? '••••••' : s.dataset.valor; });
+  btn.textContent = revelado ? '👁 Ver senhas' : '🙈 Ocultar senhas';
 }
 
 async function abrirFormUsuario(id) {
@@ -182,19 +196,26 @@ async function abrirFormUsuario(id) {
         // Busca a senha do sistema AO VIVO direto no banco do cliente — não
         // depende do espelho central, então aparece mesmo que o cliente
         // nunca tenha trocado a senha (valor padrão de fábrica incluso).
-        const senhaInp = document.getElementById('usu-senha-sistema');
-        senhaInp.placeholder = 'Carregando…';
-        if (cfg.projectId) {
-          try {
-            const senhaAtualReal = await _lerSenhaSistemaDoTenant(cfg);
-            senhaInp.value = senhaAtualReal;
-            senhaInp.placeholder = 'deixe em branco pra não alterar';
-          } catch (e) {
-            console.error('Erro ao ler senha do sistema do cliente:', e);
-            senhaInp.placeholder = 'Não foi possível ler (verifique as regras do Firestore desse cliente)';
-          }
+        // Não se aplica à própria conta do admin (ela não tem banco de cliente).
+        const wrapSenhaSistema = document.getElementById('usu-senha-sistema-wrap');
+        if (d.isAdmin) {
+          wrapSenhaSistema.style.display = 'none';
         } else {
-          senhaInp.placeholder = 'Este cliente ainda não tem Firebase configurado';
+          wrapSenhaSistema.style.display = 'block';
+          const senhaInp = document.getElementById('usu-senha-sistema');
+          senhaInp.placeholder = 'Carregando…';
+          if (cfg.projectId) {
+            try {
+              const senhaAtualReal = await _lerSenhaSistemaDoTenant(cfg);
+              senhaInp.value = senhaAtualReal;
+              senhaInp.placeholder = 'deixe em branco pra não alterar';
+            } catch (e) {
+              console.error('Erro ao ler senha do sistema do cliente:', e);
+              senhaInp.placeholder = 'Não foi possível ler (verifique as regras do Firestore desse cliente)';
+            }
+          } else {
+            senhaInp.placeholder = 'Este cliente ainda não tem Firebase configurado';
+          }
         }
       }
     } catch (e) { console.error(e); }
