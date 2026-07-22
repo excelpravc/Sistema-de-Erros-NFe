@@ -171,7 +171,6 @@ async function abrirFormUsuario(id) {
         document.getElementById('usu-senha').value = d.senha || '';
         document.getElementById('usu-empresa').value = d.empresa || '';
         document.getElementById('usu-ativo').checked = d.ativo !== false;
-        document.getElementById('usu-senha-sistema').value = d.senhaSistemaAtual || '';
         const cfg = d.firebaseConfig || {};
         document.getElementById('usu-apiKey').value = cfg.apiKey || '';
         document.getElementById('usu-authDomain').value = cfg.authDomain || '';
@@ -179,10 +178,44 @@ async function abrirFormUsuario(id) {
         document.getElementById('usu-storageBucket').value = cfg.storageBucket || '';
         document.getElementById('usu-messagingSenderId').value = cfg.messagingSenderId || '';
         document.getElementById('usu-appId').value = cfg.appId || '';
+
+        // Busca a senha do sistema AO VIVO direto no banco do cliente — não
+        // depende do espelho central, então aparece mesmo que o cliente
+        // nunca tenha trocado a senha (valor padrão de fábrica incluso).
+        const senhaInp = document.getElementById('usu-senha-sistema');
+        senhaInp.placeholder = 'Carregando…';
+        if (cfg.projectId) {
+          try {
+            const senhaAtualReal = await _lerSenhaSistemaDoTenant(cfg);
+            senhaInp.value = senhaAtualReal;
+            senhaInp.placeholder = 'deixe em branco pra não alterar';
+          } catch (e) {
+            console.error('Erro ao ler senha do sistema do cliente:', e);
+            senhaInp.placeholder = 'Não foi possível ler (verifique as regras do Firestore desse cliente)';
+          }
+        } else {
+          senhaInp.placeholder = 'Este cliente ainda não tem Firebase configurado';
+        }
       }
     } catch (e) { console.error(e); }
   }
   document.getElementById('modal-usuario').classList.add('open');
+}
+
+// Lê a senha do sistema (edição) direto do banco do próprio cliente,
+// abrindo uma conexão temporária e fechando em seguida.
+async function _lerSenhaSistemaDoTenant(firebaseConfig) {
+  const nomeApp = 'admin-read-temp';
+  const existente = firebase.apps.find(a => a.name === nomeApp);
+  if (existente) { try { await existente.delete(); } catch (e) {} }
+  const app = firebase.initializeApp(firebaseConfig, nomeApp);
+  try {
+    const db = app.firestore();
+    const snap = await db.collection('config').doc('sistema').get();
+    return snap.exists ? (snap.data().senha || '@MANIFESTO') : '@MANIFESTO';
+  } finally {
+    try { await app.delete(); } catch (e) { console.warn('Falha ao fechar conexão temporária:', e); }
+  }
 }
 
 function fecharFormUsuario() {
