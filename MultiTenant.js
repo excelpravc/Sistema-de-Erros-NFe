@@ -157,9 +157,10 @@ async function _renderListaUsuarios() {
 async function abrirFormUsuario(id) {
   document.getElementById('usu-doc-id').value = id || '';
   document.getElementById('modal-usuario-titulo').textContent = id ? '✏️ Editar Usuário' : '➕ Novo Usuário';
-  ['usu-usuario', 'usu-senha', 'usu-empresa', 'usu-apiKey', 'usu-authDomain', 'usu-projectId', 'usu-storageBucket', 'usu-messagingSenderId', 'usu-appId']
+  ['usu-usuario', 'usu-senha', 'usu-empresa', 'usu-apiKey', 'usu-authDomain', 'usu-projectId', 'usu-storageBucket', 'usu-messagingSenderId', 'usu-appId', 'usu-senha-sistema']
     .forEach(fid => { document.getElementById(fid).value = ''; });
   document.getElementById('usu-ativo').checked = true;
+  document.getElementById('usu-senha-sistema-wrap').style.display = id ? 'block' : 'none';
 
   if (id) {
     try {
@@ -170,6 +171,7 @@ async function abrirFormUsuario(id) {
         document.getElementById('usu-senha').value = d.senha || '';
         document.getElementById('usu-empresa').value = d.empresa || '';
         document.getElementById('usu-ativo').checked = d.ativo !== false;
+        document.getElementById('usu-senha-sistema').value = d.senhaSistemaAtual || '';
         const cfg = d.firebaseConfig || {};
         document.getElementById('usu-apiKey').value = cfg.apiKey || '';
         document.getElementById('usu-authDomain').value = cfg.authDomain || '';
@@ -193,6 +195,7 @@ async function salvarUsuario() {
   const senha = document.getElementById('usu-senha').value.trim();
   const empresa = document.getElementById('usu-empresa').value.trim();
   const ativo = document.getElementById('usu-ativo').checked;
+  const novaSenhaSistema = document.getElementById('usu-senha-sistema').value.trim();
   const firebaseConfig = {
     apiKey: document.getElementById('usu-apiKey').value.trim(),
     authDomain: document.getElementById('usu-authDomain').value.trim(),
@@ -207,6 +210,14 @@ async function salvarUsuario() {
   const dados = { usuario, senha, empresa, ativo, firebaseConfig };
 
   try {
+    // Se o ADM preencheu uma nova senha do sistema (edição), grava ela
+    // DIRETO no banco Firestore do próprio cliente — não só no espelho central.
+    if (id && novaSenhaSistema && firebaseConfig.projectId) {
+      await _escreverSenhaSistemaNoTenant(firebaseConfig, novaSenhaSistema);
+      dados.senhaSistemaAtual = novaSenhaSistema;
+      dados.senhaSistemaAtualizadaEm = new Date().toISOString();
+    }
+
     if (id) {
       await window.dbCentral.collection('usuarios').doc(id).set(dados, { merge: true });
       toast('✓ Usuário atualizado!');
@@ -222,6 +233,21 @@ async function salvarUsuario() {
   } catch (e) {
     console.error(e);
     toast('Erro ao salvar usuário: ' + e.message, true);
+  }
+}
+
+// Abre uma conexão temporária com o Firebase do cliente só pra gravar a
+// nova senha do sistema, e fecha essa conexão logo em seguida.
+async function _escreverSenhaSistemaNoTenant(firebaseConfig, novaSenha) {
+  const nomeApp = 'admin-write-temp';
+  const existente = firebase.apps.find(a => a.name === nomeApp);
+  if (existente) { try { await existente.delete(); } catch (e) {} }
+  const app = firebase.initializeApp(firebaseConfig, nomeApp);
+  try {
+    const db = app.firestore();
+    await db.collection('config').doc('sistema').set({ senha: novaSenha }, { merge: true });
+  } finally {
+    try { await app.delete(); } catch (e) { console.warn('Falha ao fechar conexão temporária:', e); }
   }
 }
 
