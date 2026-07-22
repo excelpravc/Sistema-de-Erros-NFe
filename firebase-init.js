@@ -18,12 +18,12 @@
 // ════════════════════════════════════════════════════════════════
 
 const firebaseConfigCentral = {
-  apiKey: "AIzaSyDxeJHRulD0P8PxoTJSr3mGOJDjS1JjIrg",
-  authDomain: "errosnfe.firebaseapp.com",
-  projectId: "errosnfe",
-  storageBucket: "errosnfe.firebasestorage.app",
-  messagingSenderId: "170174169065",
-  appId: "1:170174169065:web:ed89d8e3279afebd2d9578"
+  apiKey: "AIzaSyB8RHXnVG4tfWz8wtHVJkAR14mfYKRkvTM",
+  authDomain: "errosnfe-admin.firebaseapp.com",
+  projectId: "errosnfe-admin",
+  storageBucket: "errosnfe-admin.firebasestorage.app",
+  messagingSenderId: "86001837648",
+  appId: "1:86001837648:web:4b89a471d72e497e92d355"
 };
 
 firebase.initializeApp(firebaseConfigCentral); // app "default" = diretório central
